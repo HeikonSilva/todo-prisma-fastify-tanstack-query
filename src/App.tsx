@@ -28,13 +28,10 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card'
 import { Ellipsis } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -48,8 +45,131 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  deleteTasksByIdMutation,
+  getTasksOptions,
+  postTasksMutation,
+  putTasksByIdMutation,
+} from '@/api/@tanstack/react-query.gen'
+import { useForm } from 'react-hook-form'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
+import type {
+  DeleteTasksByIdData,
+  PostTasksData,
+  PutTasksByIdData,
+} from './api'
 
 function App() {
+  const queryClient = useQueryClient()
+
+  const { data: queryTasks } = useQuery({
+    ...getTasksOptions(),
+  })
+
+  const createTaskForm = useForm<PostTasksData>()
+
+  const { mutateAsync: createTask } = useMutation({
+    mutationFn: async (data: PostTasksData) => {
+      const response = await postTasksMutation({
+        body: {
+          title: data.body.title,
+        },
+      }).mutationFn()
+      return response // This will contain the newly created task with id and status
+    },
+    onSuccess: (newTask) => {
+      queryClient.setQueryData(
+        getTasksOptions().queryKey,
+        (oldData: typeof queryTasks) => {
+          if (!oldData) return [newTask]
+          return [...oldData, newTask]
+        }
+      )
+    },
+  })
+
+  async function handleCreateTaskSubmit(data: PostTasksData) {
+    try {
+      await createTask(data)
+    } catch (error) {
+      console.log(error)
+    }
+  }
+
+  const editTaskForm = useForm<PutTasksByIdData>()
+
+  const { mutateAsync: putTask } = useMutation({
+    mutationFn: async (data: PutTasksByIdData) => {
+      const response = await putTasksByIdMutation({
+        body: {
+          title: data.body.title,
+          status: data.body.status,
+        },
+        path: {
+          id: data.path.id,
+        },
+      }).mutationFn()
+      return response
+    },
+    onSuccess(data, variables) {
+      queryClient.setQueryData(
+        getTasksOptions().queryKey,
+        (oldData: typeof queryTasks) => {
+          if (!oldData) return []
+          return oldData.map((task) =>
+            task.id === variables.path.id ? { ...task, ...data } : task
+          )
+        }
+      )
+    },
+  })
+
+  async function handleEditTaskSubmit(data: PutTasksByIdData) {
+    try {
+      await putTask(data)
+    } catch (error) {
+      console.log(error)
+    }
+  }
+
+  const deleteTaskForm = useForm<DeleteTasksByIdData>()
+
+  const { mutateAsync: deleteTask } = useMutation({
+    mutationFn: async (data: DeleteTasksByIdData) => {
+      const response = await deleteTasksByIdMutation({
+        path: {
+          id: data.path.id,
+        },
+      }).mutationFn()
+      return response
+    },
+    onSuccess(_, variables) {
+      queryClient.setQueryData(
+        getTasksOptions().queryKey,
+        (oldData: typeof queryTasks) => {
+          if (!oldData) return []
+          return oldData.filter((task) => task.id !== variables.path.id)
+        }
+      )
+    },
+  })
+
+  async function handleDeleteTaskSubmit(data: DeleteTasksByIdData) {
+    try {
+      await deleteTask(data)
+    } catch (error) {
+      console.log(error)
+    }
+  }
+
   return (
     <div className="h-screen w-screen flex items-center justify-center">
       <Card>
@@ -60,29 +180,47 @@ function App() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Task</TableHead>
+                <TableHead className="w-xs">Task</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow>
-                <TableCell>Learn React</TableCell>
-                <TableCell>In Progress</TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant={'secondary'}>
-                        <Ellipsis />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuGroup>
-                        <Dialog>
-                          <form>
+              {queryTasks?.map((task) => (
+                <TableRow key={task.id}>
+                  <TableCell>{task.title}</TableCell>
+                  <TableCell>
+                    {task.status === 0
+                      ? 'Pending'
+                      : task.status === 1
+                      ? 'In Progress'
+                      : task.status === 2
+                      ? 'Completed'
+                      : 'Unknown'}
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant={'ghost'}>
+                          <Ellipsis />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuGroup>
+                          <Dialog>
                             <DialogTrigger asChild>
                               <DropdownMenuItem
-                                onSelect={(e) => e.preventDefault()}
+                                onSelect={(e) => {
+                                  e.preventDefault()
+                                  // Set default values including path.id and body fields
+                                  editTaskForm.reset({
+                                    path: { id: task.id },
+                                    body: {
+                                      title: task.title,
+                                      status: task.status,
+                                    },
+                                  })
+                                }}
                               >
                                 Edit
                               </DropdownMenuItem>
@@ -94,74 +232,130 @@ function App() {
                                   Update the task details below.
                                 </DialogDescription>
                               </DialogHeader>
-                              <div className="grid gap-4">
-                                <Label htmlFor="task">Task</Label>
-                                <Input id="task" defaultValue="Learn React" />
-                                <Label htmlFor="status">Status</Label>
-                                <Select defaultValue="in-progress">
-                                  <SelectTrigger id="status" className="w-full">
-                                    <SelectValue placeholder="Select status" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectGroup>
-                                      <SelectLabel>Status</SelectLabel>
-                                      <SelectItem value="in-progress">
-                                        In Progress
-                                      </SelectItem>
-                                      <SelectItem value="completed">
-                                        Completed
-                                      </SelectItem>
-                                      <SelectItem value="pending">
-                                        Pending
-                                      </SelectItem>
-                                    </SelectGroup>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <DialogFooter>
-                                <DialogClose asChild>
-                                  <Button variant="outline">Cancel</Button>
-                                </DialogClose>
-                                <Button type="submit">Save changes</Button>
-                              </DialogFooter>
+                              <Form {...editTaskForm}>
+                                <form
+                                  className="space-y-4"
+                                  onSubmit={editTaskForm.handleSubmit(
+                                    handleEditTaskSubmit
+                                  )}
+                                >
+                                  <FormField
+                                    control={editTaskForm.control}
+                                    name="body.title"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>Task Name</FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="Enter task name"
+                                            defaultValue={task.title}
+                                            {...field}
+                                            required
+                                          />
+                                        </FormControl>
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  <FormField
+                                    control={editTaskForm.control}
+                                    name="body.status"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>Status</FormLabel>
+                                        <Select
+                                          onValueChange={field.onChange}
+                                          defaultValue={task.status.toString()}
+                                        >
+                                          <FormControl>
+                                            <SelectTrigger className="w-full">
+                                              <SelectValue placeholder="Select a status" />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent>
+                                            <SelectItem value="0">
+                                              Pending
+                                            </SelectItem>
+                                            <SelectItem value="1">
+                                              In Progress
+                                            </SelectItem>
+                                            <SelectItem value="2">
+                                              Completed
+                                            </SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                  <DialogFooter>
+                                    <DialogClose asChild>
+                                      <Button variant="outline">Cancel</Button>
+                                    </DialogClose>
+                                    <DialogClose asChild>
+                                      <Button type="submit">
+                                        Save changes
+                                      </Button>
+                                    </DialogClose>
+                                  </DialogFooter>
+                                </form>
+                              </Form>
                             </DialogContent>
-                          </form>
-                        </Dialog>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <DropdownMenuItem
-                              onSelect={(e) => e.preventDefault()}
-                            >
-                              Delete
-                            </DropdownMenuItem>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This action will delet your task permanmently.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction>Confirm</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </DropdownMenuGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
+                          </Dialog>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <DropdownMenuItem
+                                onSelect={(e) => {
+                                  e.preventDefault()
+                                  // Set default values including path.id and body fields
+                                  deleteTaskForm.reset({
+                                    path: { id: task.id },
+                                  })
+                                }}
+                              >
+                                Delete
+                              </DropdownMenuItem>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  Are you sure?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This action will delete your task permanently.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <Form {...deleteTaskForm}>
+                                <form
+                                  onSubmit={deleteTaskForm.handleSubmit(
+                                    handleDeleteTaskSubmit
+                                  )}
+                                >
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>
+                                      Cancel
+                                    </AlertDialogCancel>
+                                    <AlertDialogAction type="submit">
+                                      Delete
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </form>
+                              </Form>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </DropdownMenuGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
 
           <Dialog>
             <DialogTrigger asChild>
-              <div className="flex justify-end">
-                <Button className="mb-4" variant={'default'}>
-                  Add Task
-                </Button>
+              <div className="flex justify-end mt-4">
+                <Button variant={'default'}>Add Task</Button>
               </div>
             </DialogTrigger>
             <DialogContent>
@@ -171,32 +365,38 @@ function App() {
                   Fill in the details of the new task below.
                 </DialogDescription>
               </DialogHeader>
-              <form>
-                <div className="grid gap-4">
-                  <Label htmlFor="new-task">Task</Label>
-                  <Input id="new-task" placeholder="Enter task name" />
-                  <Label htmlFor="new-status">Status</Label>
-                  <Select defaultValue="in-progress">
-                    <SelectTrigger id="new-status" className="w-full">
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectLabel>Status</SelectLabel>
-                        <SelectItem value="in-progress">In Progress</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <DialogFooter className="mt-4">
-                  <DialogClose asChild>
-                    <Button variant="outline">Cancel</Button>
-                  </DialogClose>
-                  <Button type="submit">Add Task</Button>
-                </DialogFooter>
-              </form>
+              <Form {...createTaskForm}>
+                <form
+                  className="space-y-4"
+                  onSubmit={createTaskForm.handleSubmit(handleCreateTaskSubmit)}
+                >
+                  <FormField
+                    control={createTaskForm.control}
+                    name="body.title"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Task Name</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Enter task name"
+                            {...field}
+                            required
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <DialogFooter>
+                    <DialogClose asChild>
+                      <Button variant="outline">Cancel</Button>
+                    </DialogClose>
+                    <DialogClose asChild>
+                      <Button type="submit">Add Task</Button>
+                    </DialogClose>
+                  </DialogFooter>
+                </form>
+              </Form>
             </DialogContent>
           </Dialog>
         </CardContent>
