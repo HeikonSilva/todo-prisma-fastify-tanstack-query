@@ -49,7 +49,7 @@ export default function (server: FastifyTypedInstance) {
         },
       },
     },
-    async (req, res) => {
+    async (_req, res) => {
       const tasks = await prisma.task.findMany()
 
       res.status(200).send(tasks)

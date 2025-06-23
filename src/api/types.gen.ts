@@ -122,5 +122,5 @@ export type PostTasksResponses = {
 export type PostTasksResponse = PostTasksResponses[keyof PostTasksResponses];
 
 export type ClientOptions = {
-    baseUrl: 'http://localhost:3000' | (string & {});
+    baseUrl: 'http://192.168.163.212:3000' | (string & {});
 };

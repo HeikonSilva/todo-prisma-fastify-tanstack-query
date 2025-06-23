@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card'
-import { Ellipsis } from 'lucide-react'
+import { Ellipsis, Moon, Sun } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -66,12 +66,15 @@ import type {
   PostTasksData,
   PutTasksByIdData,
 } from './api'
+import { useTheme } from './components/theme-provider'
 
 function App() {
+  const { setTheme } = useTheme()
   const queryClient = useQueryClient()
 
   const { data: queryTasks } = useQuery({
     ...getTasksOptions(),
+    refetchInterval: 1000,
   })
 
   const createTaskForm = useForm<PostTasksData>()
@@ -171,7 +174,7 @@ function App() {
   }
 
   return (
-    <div className="h-screen w-screen flex items-center justify-center">
+    <div className="h-screen w-screen flex items-center justify-center transition-all">
       <Card>
         <CardHeader>
           <CardTitle>Todo List</CardTitle>
@@ -401,6 +404,30 @@ function App() {
           </Dialog>
         </CardContent>
       </Card>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            className="absolute bottom-4 right-4"
+            variant="outline"
+            size="icon"
+          >
+            <Sun className="h-[1.2rem] w-[1.2rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
+            <Moon className="absolute h-[1.2rem] w-[1.2rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
+            <span className="sr-only">Toggle theme</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => setTheme('light')}>
+            Light
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setTheme('dark')}>
+            Dark
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setTheme('system')}>
+            System
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }
